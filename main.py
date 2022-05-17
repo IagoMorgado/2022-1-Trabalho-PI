@@ -1,6 +1,7 @@
 
 
 import threading
+from time import time
 import tkinter as tk
 from _thread import *
 from tkinter import Menu, Frame, Label, HORIZONTAL, TOP, X, YES
@@ -174,11 +175,15 @@ class MainWindow:
             print("IMAGE IS NONE")
             showerror("Error", "Não há nenhuma imagem para ser classificada")
             return
+        inicio=time()
         descriptors = processImageAndGetDescriptors(image=self.image_original)
         descriptors = numpy.reshape(descriptors, (1, -1))
         predicted = self.clf.predict(descriptors)
+        fim=time()
         showinfo("Classificação", f"Birads {predicted[0]}")
         print(predicted)
+        classify_time=fim-inicio
+        print(f"tempo de classificação {classify_time} segundos")
 
     def save_train(self):
         if self.clf is not None:
