@@ -20,14 +20,15 @@ def loadclf():
 def saveclf(clf):
     dump(clf, 'clf.joblib')
 
-
-def compute_entropy_for_glcm4d(glcm4d,distancesArr):
+#gera a lista de entropia
+def compute_entropy(glcm4d,distancesArr):
     entropyList = []
     for i in range(5):
             entropy = shannon_entropy(glcm4d[:, :, distancesArr[i], 0])
             entropyList.append(entropy)
     return entropyList
 
+#calcula a matriz de coocorrência circular por meio do algoritmo de Bresenham para circunferências
 def ComputeMatrizCircular(x,y,xc,yc,imageArray,imgSize,distance,glcm4d):
     if (x+xc)<imgSize and (y+yc)<imgSize and (-y+yc)<imgSize and (-x+xc)<imgSize:
         glcm4d[imageArray[xc,yc],imageArray[(x+xc),(y+yc)],distance,0]=glcm4d[imageArray[xc,yc],imageArray[(x+xc),(y+yc)],0,0]+1
@@ -50,14 +51,14 @@ def getMatrizCircular(imageArray,imgSize,glcm4d,distance):
             y=distance
             p=3-(2*distance)
             glcm4d=ComputeMatrizCircular(x,y,i,j,imageArray,imgSize,distance,glcm4d)
-        while x<y:
-            if p<0: 
-                p+=4*x+6
-            else: 
-                p+=4*(x-y)+10
-                y=y-1
-            x=x+1
-            glcm4d=ComputeMatrizCircular(x,y,i,j,imageArray,imgSize,distance,glcm4d)
+            while x<y:
+                if p<0: 
+                    p+=4*x+6
+                else: 
+                    p+=4*(x-y)+10
+                    y=y-1
+                x=x+1
+                glcm4d=ComputeMatrizCircular(x,y,i,j,imageArray,imgSize,distance,glcm4d)
     return glcm4d
 
 def compute_descriptors(image,greyNum):
@@ -66,49 +67,61 @@ def compute_descriptors(image,greyNum):
     distancesArr=[1,2,4,8,16]
     glcm4d=[0]*(greyNum*greyNum*17*1)
     glcm4d=np.reshape(glcm4d,(greyNum,greyNum,17,1))
+    #calcula a matriz de coocorência circular para as diferentes distâncias
     for i in range(5):
         glcm4d=getMatrizCircular(imageArray, imgSize,glcm4d,distance=distancesArr[i])
-
+    #calcula a matriz de homogeneidade e a matriz de energia
     homogeneityMatrix = greycoprops(glcm4d, 'homogeneity')
     energyMatrix = greycoprops(glcm4d, 'energy')
-    
-    entropyList = compute_entropy_for_glcm4d(glcm4d,distancesArr)
+    #gera a lista de homomogeneidade, entropia e energia
+    entropyList = compute_entropy(glcm4d,distancesArr)
     homogeneityList = np.hstack(homogeneityMatrix)
     energyList= np.hstack(energyMatrix)
 
     return list(energyList)+list(homogeneityList) + list(entropyList)
 
-def processImageAndComputeDescriptors(path=None, image=None):
+#redimensiona, equaliza e quantiza as imagens para efetuar o cálculo dos descritores
+def processImageAndGetDescriptors(path=None, image=None):
     if image is None:
         image = Image.open(path)
+
+    image.resize((128,128))
     imageEqualized = ImageOps.equalize(image)
     imageGray = imageEqualized.convert("L")
-    image8Colors = imageGray.quantize(colors=8)
-    image16Colors = imageGray.quantize(colors=16)
+    #image8Colors = imageGray.quantize(colors=8)
+    #image16Colors = imageGray.quantize(colors=16)
     image32Colors = imageGray.quantize(colors=32)
-    allDescriptors = compute_descriptors(image32Colors,32) + compute_descriptors(image16Colors,16)+ compute_descriptors(image8Colors,8)
+    allDescriptors = compute_descriptors(image32Colors,32)
+    #allDescriptors = compute_descriptors(image32Colors,32) + compute_descriptors(image16Colors,16)+ compute_descriptors(image8Colors,8)
     return allDescriptors
 
-
+#abre todas as imagens e obtem os descritores de cada imagem
 def readImages(trainWindow):
+    #diretório base 
     basePath = "imagens/"
     types = []
     imagesDescriptors = []
     num_of_images_processed = 0
+    #abre os 4 diretórios para calcular os descritores 
     for i in range(1, 5):
+        #calcula os descritores e alimenta a barra de progresso para todas as imagens do diretório
         for entry in os.scandir(basePath + str(i) + "/"):
             if entry.path.endswith(".png") and entry.is_file():
-                imagesDescriptors.append(processImageAndComputeDescriptors(entry.path))
+                #adiciona descritores da imagem à lista de descritores
+                imagesDescriptors.append(processImageAndGetDescriptors(entry.path))
+                #adiciona o tipo da imagem à lista de tipos
                 types.append(i)
                 num_of_images_processed += 1
+                #alimenta a barra de progresso
                 trainWindow.progress['value'] = int((num_of_images_processed/400)*100)
                 trainWindow.update_idletasks()
-                trainWindow.labelVar.set(f"Gerando descritores {num_of_images_processed}/400")
-                print(f"Gerando descritores {num_of_images_processed}/400")
+                trainWindow.labelVar.set(f"Gerando descritores {num_of_images_processed}/400 imagens")
+                print(f"Gerando descritores {num_of_images_processed}/400 imagens")
     return imagesDescriptors, types
 
 
 def trainclf(trainWindow):
+    #Inicia o treino e pega o momento em que o treino foi iniciado.
     inicio = time()
     imagesDescriptors, types = readImages(trainWindow)
     trainWindow.progress.destroy()
